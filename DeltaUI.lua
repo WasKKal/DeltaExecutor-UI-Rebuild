@@ -59,8 +59,8 @@ function LoadLucide()
 
     if not content or content == "" then
         local moduleUrls = {
-            "https://cdn.jsdelivr.net/gh/WasKKal/DeltaExecutor-UI-Rebuild@latest/lucide/init.lua",
-            "https://cdn.jsdelivr.net/gh/WasKKal/DeltaExecutor-UI-Rebuild@master/lucide/init.lua",
+            "https://cdn.jsdelivr.net/gh/WasKKal/Asset@latest/lucide/init.lua",
+            "https://raw.githubusercontent.com/WasKKal/Asset/master/lucide/init.lua",
         }
         for _, url in ipairs(moduleUrls) do
             for _ = 1, 2 do
@@ -250,6 +250,82 @@ function refreshThemeGradients()
     end
 
 end
+
+local modalFadeBase = {}
+local modalFadeToken = {}
+
+local function getModalFadeTargets(overlay)
+    local cached = modalFadeBase[overlay]
+    if cached then return cached end
+    local list = {}
+    local function grab(obj, prop)
+        pcall(function()
+            local v = obj[prop]
+            if type(v) == "number" and v < 1 then
+                table.insert(list, {obj = obj, prop = prop, orig = v})
+            end
+        end)
+    end
+    local function scan(node)
+        pcall(function()
+            if node:IsA("GuiObject") then
+                grab(node, "BackgroundTransparency")
+                if node:IsA("TextLabel") or node:IsA("TextButton") or node:IsA("TextBox") then
+                    grab(node, "TextTransparency")
+                elseif node:IsA("ImageLabel") or node:IsA("ImageButton") then
+                    grab(node, "ImageTransparency")
+                end
+            elseif node:IsA("UIStroke") then
+                grab(node, "Transparency")
+            end
+        end)
+        for _, c in ipairs(node:GetChildren()) do scan(c) end
+    end
+    scan(overlay)
+    modalFadeBase[overlay] = list
+    return list
+end
+
+function fadeModal(overlay, show, duration)
+    if not overlay then return end
+    duration = duration or 0.22
+    local targets = getModalFadeTargets(overlay)
+    modalFadeToken[overlay] = (modalFadeToken[overlay] or 0) + 1
+    local myToken = modalFadeToken[overlay]
+    local ti = TweenInfo.new(duration, Enum.EasingStyle.Quad,
+        show and Enum.EasingDirection.Out or Enum.EasingDirection.In)
+    if show then
+        if not overlay.Visible then
+            for _, e in ipairs(targets) do
+                pcall(function() if e.obj and e.obj.Parent then e.obj[e.prop] = 1 end end)
+            end
+        end
+        overlay.Visible = true
+        pcall(function() overlay.Active = true end)
+        for _, e in ipairs(targets) do
+            pcall(function()
+                if e.obj and e.obj.Parent then
+                    svc.TweenService:Create(e.obj, ti, {[e.prop] = e.orig}):Play()
+                end
+            end)
+        end
+    else
+        pcall(function() overlay.Active = false end)
+        for _, e in ipairs(targets) do
+            pcall(function()
+                if e.obj and e.obj.Parent then
+                    svc.TweenService:Create(e.obj, ti, {[e.prop] = 1}):Play()
+                end
+            end)
+        end
+        task.delay(duration + 0.03, function()
+            if modalFadeToken[overlay] ~= myToken then return end
+            overlay.Visible = false
+            pcall(function() overlay.Active = true end)
+        end)
+    end
+end
+
 function splitLines(text)
     local lines = {}
     local pos = 1
@@ -335,18 +411,11 @@ function makeGradientBtn(parent, size, anchorPoint, position, text, callback)
 end
 
 local translations = {
+    rejoin = {en = "Rejoin", zh = "重新加入", ko = "재접속", ja = "再参加"},
     script_loaded = {en = "Loaded: ", zh = "加载完成: ", ko = "로드 완료: ", ja = "読み込み完了: "},
+    rejoin_desc = {en = "Rejoins your current server", zh = "重新加入当前服务器", ko = "현재 서버에 재접속", ja = "現在のサーバーに再参加"},
     small_server = {en = "Small Server", zh = "小服务器", ko = "소규모 서버", ja = "小規模サーバー"},
     small_server_desc = {en = "Joins a server with a low playercount", zh = "加入玩家数较少的服务器", ko = "플레이어 수가 적은 서버 참가", ja = "プレイヤー数が少ないサーバーに参加"},
-    rejoin = {en = "Rejoin", zh = "重新加入", ko = "재접속", ja = "再参加"},
-    rejoin_desc = {en = "Rejoins your current server", zh = "重新加入当前服务器", ko = "현재 서버에 재접속", ja = "現在のサーバーに再参加"},
-    danger_features = {en = "Dangerous Features", zh = "危险功能", ko = "위험 기능", ja = "危険な機能"},
-    install_danger_btn = {en = "INSTALL", zh = "安装危险功能", ko = "설치", ja = "インストール"},
-    uninstall_danger_btn = {en = "UNINSTALL", zh = "卸载", ko = "제거", ja = "アンインストール"},
-    install_danger_desc = {en = "Download dangerous-feature script from remote to local", zh = "从远程下载危险功能脚本到本地", ko = "원격에서 위험 기능 스크립트를 로컬로 다운로드", ja = "リモートから危険機能スクリプトをローカルにダウンロード"},
-    danger_installed = {en = "Dangerous features installed", zh = "危险功能已安装到本地", ko = "위험 기능이 설치되었습니다", ja = "危険機能がインストールされました"},
-    danger_uninstalled = {en = "Dangerous features removed", zh = "已卸载危险功能", ko = "위험 기능이 제거되었습니다", ja = "危険機能が削除されました"},
-    danger_install_failed = {en = "Download failed", zh = "下载失败，请检查网络或地址", ko = "다운로드 실패", ja = "ダウンロード失敗"},
     fps_cap = {en = "FPS Cap", zh = "帧率限制", ko = "FPS 제한", ja = "FPS制限"},
     fps_cap_desc = {en = "Change the FPS cap for a smoother experience", zh = "更改帧率限制以获得更流畅的体验", ko = "더 부드러운 경험을 위해 FPS 제한 변경", ja = "よりスムーズな体験のためFPS制限を変更"},
     icon_size = {en = "Icon Size", zh = "图标大小", ko = "아이콘 크기", ja = "アイコンサイズ"},
@@ -360,8 +429,6 @@ local translations = {
     console_desc = {en = "Enable or disable console log output", zh = "启用或禁用控制台日志输出", ko = "콘솔 로그 출력 활성화 또는 비활성화", ja = "コンソールログ出力の有効/無効"},
     auto_execute = {en = "Auto Execute", zh = "自动执行", ko = "자동 실행", ja = "自動実行"},
     auto_execute_desc = {en = "Toggle auto-execution of scripts in the autoexec folder", zh = "切换 autoexec 文件夹中脚本的自动执行", ko = "autoexec 폴더의 스크립트 자동 실행 전환", ja = "autoexecフォルダのスクリプト自動実行を切り替え"},
-    auto_accept_exec = {en = "Auto accept code execution", zh = "自动接受代码执行", ko = "자동 코드 실행 수락", ja = "コード実行を自動承認"},
-    auto_accept_exec_desc = {en = "Skip confirmation dialog, automatically accept all execute_lua requests", zh = "跳过确认弹窗，自动接受所有代码执行请求", ko = "확인 대화 상자 건너뛰기, 모든 execute_lua 요청 자동 수락", ja = "確認ダイアログをスキップし、すべてのexecute_luaリクエストを自動承認"},
     click_here = {en = "CLICK HERE", zh = "点击这里", ko = "여기 클릭", ja = "ここをクリック"},
     language = {en = "Language", zh = "语言", ko = "언어", ja = "言語"},
     language_desc = {en = "Select your preferred language", zh = "选择您偏好的语言", ko = "선호하는 언어 선택", ja = "好みの言語を選択"},
@@ -438,6 +505,7 @@ local translations = {
     block_internal_errors_desc = {en = "Filter out Roblox engine and other script errors", zh = "过滤Roblox引擎和其他脚本的报错信息", ko = "Roblox 엔진 및 기타 스크립트 오류 필터링", ja = "Robloxエンジンと他のスクリプトエラーをフィルタリング"},
     real_line_numbers = {en = "Real Line Numbers", zh = "自动计算真实报错行", ko = "실제 줄 번호 계산", ja = "実際の行番号を計算"},
     real_line_numbers_desc = {en = "Adjust error line numbers to exclude default header text", zh = "修正报错行号，排除预设文本的偏移", ko = "기본 헤더 텍스트를 제외한 실제 오류 줄 번호", ja = "デフォルトヘッダーテキストを除いた実際のエラー行番号"},
+    real_line = {en = "real line", zh = "真实行", ko = "실제 줄", ja = "実際の行"},
     detailed_errors = {en = "Detailed Errors", zh = "更详细的错误信息", ko = "상세 오류 정보", ja = "詳細なエラー情報"},
     detailed_errors_desc = {en = "Show additional error context and source info", zh = "显示额外的错误上下文和来源信息", ko = "추가 오류 컨텍스트 및 소스 정보 표시", ja = "追加のエラーコンテキストとソース情報を表示"},
     extension_package_options = {en = "Other options", zh = "其他选项", ko = "기타 옵션", ja = "その他のオプション"},
@@ -504,6 +572,7 @@ local translations = {
     block_internal_errors_desc = {en = "Filter out Roblox engine and other script errors", zh = "过滤Roblox引擎和其他脚本的报错信息", ko = "Roblox 엔진 및 기타 스크립트 오류 필터링", ja = "Robloxエンジンと他のスクリプトエラーをフィルタリング"},
     real_line_numbers = {en = "Real Line Numbers", zh = "自动计算真实报错行", ko = "실제 줄 번호 계산", ja = "実際の行番号を計算"},
     real_line_numbers_desc = {en = "Adjust error line numbers to exclude default header text", zh = "修正报错行号，排除预设文本的偏移", ko = "기본 헤더 텍스트를 제외한 실제 오류 줄 번호", ja = "デフォルトヘッダーテキストを除いた実際のエラー行番号"},
+    real_line = {en = "real line", zh = "真实行", ko = "실제 줄", ja = "実際の行"},
     detailed_errors = {en = "Detailed Errors", zh = "更详细的错误信息", ko = "상세 오류 정보", ja = "詳細なエラー情報"},
     detailed_errors_desc = {en = "Show additional error context and source info", zh = "显示额外的错误上下文和来源信息", ko = "추가 오류 컨텍스트 및 소스 정보 표시", ja = "追加のエラーコンテキストとソース情報を表示"},
     scriptblox_search = {en = "Search ScriptBlox...", zh = "搜索 ScriptBlox...", ko = "ScriptBlox 검색...", ja = "ScriptBloxを検索..."},
@@ -517,6 +586,9 @@ local translations = {
     open_btn = {en = "OPEN", zh = "打开", ko = "열기", ja = "開く"},
     verified_badge = {en = "VERIFIED", zh = "已验证", ko = "인증됨", ja = "認証済み"},
     fetch_failed = {en = "Failed to fetch script source", zh = "获取脚本源码失败", ko = "스크립트 소스를 가져오지 못함", ja = "スクリプトソースの取得に失敗"},
+    kb_loading = {en = "KeyBoard: loading...", zh = "KeyBoard：加载中…", ko = "KeyBoard: 불러오는 중...", ja = "KeyBoard: 読み込み中..."},
+    kb_ok = {en = "KeyBoard: running", zh = "KeyBoard：已运行", ko = "KeyBoard: 실행됨", ja = "KeyBoard: 実行中"},
+    kb_fail = {en = "KeyBoard: failed", zh = "KeyBoard：执行失败", ko = "KeyBoard: 실패", ja = "KeyBoard: 失敗"},
     opened_editor = {en = "Opened in editor", zh = "已在编辑器中打开", ko = "에디터에서 열림", ja = "エディタで開きました"},
     script_saved = {en = "Script saved", zh = "脚本已保存", ko = "스크립트 저장됨", ja = "スクリプトを保存しました"},
     copied = {en = "Copied to clipboard", zh = "已复制到剪贴板", ko = "클립보드에 복사됨", ja = "クリップボードにコピーしました"},
@@ -524,6 +596,8 @@ local translations = {
     console_copied_count = {en = "Copied %d lines", zh = "已复制 %d 条输出", ko = "%d개 줄 복사됨", ja = "%d 行をコピーしました"},
     clipboard_unavailable = {en = "Clipboard API unavailable", zh = "剪贴板 API 不可用", ko = "클립보드 API 사용 불가", ja = "クリップボードAPIが利用できません"},
     execution_error_notify = {en = "Error occurred! Jump to console", zh = "遇到报错! 请跳转控制台!", ko = "오류 발생! 콘솔로 이동", ja = "エラー発生! コンソールへ"},
+    anti_kick = {en = "Anti Kick", zh = "反踢出", ko = "킥 방지", ja = "キック防止"},
+    anti_kick_desc = {en = "Prevent other scripts from kicking you", zh = "防止其他脚本调用kick踢出", ko = "다른 스크립트의 킥 방지", ja = "他のスクリプトによるキックを防止"},
     network_request_header = {en = "Network Request Header", zh = "网络请求头类型", ko = "네트워크 요청 헤더", ja = "ネットワークリクエストヘッダー"},
     network_request_header_desc = {en = "Select the platform for HTTP requests", zh = "选择HTTP请求的平台类型", ko = "HTTP 요청에 사용할 플랫폼 선택", ja = "HTTPリクエストのプラットフォームを選択"},
     interface_type = {en = "Interface Type", zh = "接口类型", ko = "인터페이스 유형", ja = "インターフェースタイプ"},
@@ -552,6 +626,8 @@ local translations = {
     select_color = {en = "Select Color", zh = "选择颜色", ko = "색상 선택", ja = "色を選択"},
     orb_border_color = {en = "Orb Border Color", zh = "悬浮球边框颜色", ko = "플로팅 볼 테두리 색상", ja = "フローティングボールの枠線色"},
     orb_border_color_desc = {en = "Customize the floating orb border color", zh = "自定义悬浮球边框颜色", ko = "플로팅 볼 테두리 색상 사용자 지정", ja = "フローティングボールの枠線色をカスタマイズ"},
+    orb_rainbow_border = {en = "Flowing Rainbow Border", zh = "流动彩虹边框", ko = "흐르는 무지개 테두리", ja = "流れる虹色の枠線"},
+    orb_rainbow_border_desc = {en = "Rainbow gradient border for the minimized orb; custom border color is ignored while enabled", zh = "最小化悬浮球边框变为流动彩虹渐变，开启时自定义边框颜色不生效", ko = "최소화된 플로팅 볼 테두리를 흐르는 무지개 그라데이션으로 변경하며, 켜진 동안 사용자 지정 테두리 색은 적용되지 않음", ja = "最小化したフローティングボールの枠線を流れる虹色グラデーションにします。有効中はカスタム枠線色は適用されません"},
     gradient_theme_color = {en = "Gradient Theme Color", zh = "渐变主题色", ko = "그라데이션 테마 색상", ja = "グラデーションテーマ色"},
     gradient_theme_color_desc = {en = "Pick one color that drives every gradient in the UI", zh = "选择一个颜色，统一控制界面中所有渐变", ko = "UI의 모든 그라데이션을 제어할 색상을 하나 선택", ja = "UI内のすべてのグラデーションを制御する色を1つ選択"},
     gradient_pick_title = {en = "Custom Gradient Mix", zh = "自定义渐变拼色", ko = "그라데이션 맞춤 조합", ja = "グラデーション配色"},
@@ -613,8 +689,8 @@ function cleanupAllConnections()
     end
 end
 
-local uiVersion = "1.0.6"
-local UI_VERSION = "1.0.6"
+local uiVersion = "1.0.7"
+local UI_VERSION = "1.0.7"
 local settingsData = {language = "zh", uiRefs = {}}
 local configFile = "DeltaUI/Config.json"
 local uiVersionChecked = false
@@ -660,6 +736,68 @@ function loadConfig()
     _G.__DeltaUI_cachedConfig = {}
     ensureDefaults(_G.__DeltaUI_cachedConfig)
     return _G.__DeltaUI_cachedConfig
+end
+
+local orbRainbowBorderEnabled = false
+local orbRainbowGrad = nil
+local orbRainbowConn = nil
+local orbRainbowRotation = 0
+local orbRainbowSequence = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
+    ColorSequenceKeypoint.new(0.1, Color3.fromRGB(255, 128, 0)),
+    ColorSequenceKeypoint.new(0.2, Color3.fromRGB(255, 255, 0)),
+    ColorSequenceKeypoint.new(0.4, Color3.fromRGB(128, 255, 0)),
+    ColorSequenceKeypoint.new(0.6, Color3.fromRGB(0, 255, 128)),
+    ColorSequenceKeypoint.new(0.8, Color3.fromRGB(0, 128, 255)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(128, 0, 255)),
+})
+
+function applyOrbRainbowBorder(on)
+    orbRainbowBorderEnabled = on and true or false
+    if orbRainbowConn then
+        pcall(function() orbRainbowConn:Disconnect() end)
+        orbRainbowConn = nil
+    end
+    if not orbStroke and orbFrame then
+        pcall(function()
+            orbStroke = orbFrame:FindFirstChildOfClass("UIStroke")
+            if not orbStroke then
+                orbStroke = create("UIStroke", {Color = theme.accent, Thickness = 1.5, Transparency = 0})
+                orbStroke.Parent = orbFrame
+            end
+        end)
+    end
+    if not orbStroke then return end
+    if orbRainbowBorderEnabled then
+        if not (orbRainbowGrad and orbRainbowGrad.Parent) then
+            pcall(function()
+                orbRainbowGrad = create("UIGradient", {Color = orbRainbowSequence, Rotation = 0})
+                orbRainbowGrad.Parent = orbStroke
+            end)
+        end
+        orbStroke.Color = Color3.fromRGB(255, 255, 255)
+        orbStroke.Transparency = 0
+        orbRainbowConn = svc.RunService.RenderStepped:Connect(function(dt)
+            if not orbFrame or not orbFrame.Visible then return end
+            if not orbStroke or not orbStroke.Parent then return end
+            if not orbRainbowGrad or not orbRainbowGrad.Parent then return end
+            orbRainbowRotation = (orbRainbowRotation + (dt or 0) * 60) % 360
+            orbRainbowGrad.Rotation = orbRainbowRotation
+            orbStroke.Color = Color3.fromRGB(255, 255, 255)
+        end)
+    else
+        if orbRainbowGrad then
+            pcall(function() orbRainbowGrad:Destroy() end)
+            orbRainbowGrad = nil
+        end
+        local ok, cfg = pcall(loadConfig)
+        local c = ok and type(cfg) == "table" and cfg.orbBorderColor or nil
+        if type(c) == "table" and c.r and c.g and c.b then
+            orbStroke.Color = Color3.fromRGB(c.r, c.g, c.b)
+        else
+            orbStroke.Color = theme.accent
+        end
+    end
 end
 
 do
@@ -1014,23 +1152,20 @@ function initFloatingBallIcon()
                     end
                 end
                 orbImg = create("ImageLabel", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Image = assetUrl, ZIndex = 102})
-                local orbCorner = orbFrame:FindFirstChildOfClass("UICorner")
-                if orbCorner then
-                    corner(orbCorner.CornerRadius.Offset, orbImg)
-                else
-                    corner(8, orbImg)
-                end
                 orbImg.Parent = orbFrame
             end
         end
     end
     local cfg = loadConfig()
-    if cfg.orbBorderColor and type(cfg.orbBorderColor) == "table" then
+    if orbRainbowBorderEnabled then
+        if orbStroke then orbStroke.Color = Color3.fromRGB(255, 255, 255) end
+    elseif cfg.orbBorderColor and type(cfg.orbBorderColor) == "table" then
         local c = cfg.orbBorderColor
         if c.r and c.g and c.b and orbStroke then
             orbStroke.Color = Color3.fromRGB(c.r, c.g, c.b)
         end
     end
+    applyIconAppearance()
 end
 installedModules = {}
 
@@ -1261,6 +1396,35 @@ function HookManager.callOriginal(id, ...)
     return nil
 end
 
+function HookManager.wrapAntiKick(targetPlayer)
+    if not targetPlayer or typeof(targetPlayer) ~= "Instance" or not targetPlayer:IsA("Player") then
+        warn("[HookManager] Invalid player instance")
+        return nil, nil
+    end
+    local kickMethod = targetPlayer.Kick
+    if not kickMethod then
+        warn("[HookManager] Kick method not found")
+        return nil, nil
+    end
+    local id = "Kick_" .. tostring(targetPlayer.UserId)
+    local wrapper = function(self, ...)
+        if self ~= targetPlayer then
+            local ok, result = pcall(HookManager.callOriginal, id, self, ...)
+            if ok then return result end
+            return nil
+        end
+        warn("[DeltaUI] Kick blocked for " .. tostring(targetPlayer.Name))
+        return nil
+    end
+    local ok = HookManager.hook(kickMethod, wrapper)
+    if ok then
+        return wrapper, function()
+            HookManager.unhook(kickMethod)
+        end
+    end
+    return nil, nil
+end
+
 function HookManager.wrapTeleport(targetService)
     local tp = targetService or game:GetService("TeleportService")
     local methods = {"Teleport", "TeleportToPlaceInstance", "TeleportAsync"}
@@ -1416,24 +1580,114 @@ function makeToggle(parent, initialState, callback, configKey)
 end
 
 local deepCustomLayoutEnabled = false
+local deepLayoutFadeBase = {}
 
-function applyDeepCustomLayout(state)
-    deepCustomLayoutEnabled = state
+local function collectDeepLayoutFadeTargets(root)
+    local cached = deepLayoutFadeBase[root]
+    if cached then return cached end
+    local list = {}
+    local function grab(obj, prop)
+        pcall(function()
+            local v = obj[prop]
+            if type(v) == "number" and v < 1 then
+                table.insert(list, {obj = obj, prop = prop, orig = v})
+            end
+        end)
+    end
+    local function scan(node)
+        pcall(function()
+            if node:IsA("GuiObject") then
+                grab(node, "BackgroundTransparency")
+                if node:IsA("TextLabel") or node:IsA("TextButton") or node:IsA("TextBox") then
+                    grab(node, "TextTransparency")
+                elseif node:IsA("ImageLabel") or node:IsA("ImageButton") then
+                    grab(node, "ImageTransparency")
+                end
+            elseif node:IsA("UIStroke") then
+                grab(node, "Transparency")
+            end
+        end)
+        for _, c in ipairs(node:GetChildren()) do scan(c) end
+    end
+    scan(root)
+    deepLayoutFadeBase[root] = list
+    return list
+end
+
+local function tweenDeepLayoutFade(roots, show, duration)
+    local ti = TweenInfo.new(duration, Enum.EasingStyle.Quad, show and Enum.EasingDirection.Out or Enum.EasingDirection.In)
+    for _, root in ipairs(roots) do
+        if root then
+            for _, e in ipairs(collectDeepLayoutFadeTargets(root)) do
+                pcall(function()
+                    if e.obj and e.obj.Parent then
+                        svc.TweenService:Create(e.obj, ti, {[e.prop] = show and e.orig or 1}):Play()
+                    end
+                end)
+            end
+        end
+    end
+end
+
+local function setDeepLayoutStatic(state)
     if state then
         navBg.AnchorPoint = Vector2.new(1, 0.5)
         navBg.Position = UDim2.new(1, -10, 0.5, 0)
         logoutBtn.AnchorPoint = Vector2.new(1, 0.5)
         logoutBtn.Position = UDim2.new(1, -10, 0.5, 152)
-        wrapperFrame.Position = UDim2.new(1, -64, 0, 86)
-        statsRow.Position = UDim2.new(1, -64, 0, 60)
+        appTitle.AnchorPoint = Vector2.new(1, 0.5)
+        appTitle.Position = UDim2.new(0, 194, 0.5, 12)
+        appTitle.TextXAlignment = Enum.TextXAlignment.Left
     else
         navBg.AnchorPoint = Vector2.new(0, 0.5)
         navBg.Position = UDim2.new(0, 10, 0.5, 0)
         logoutBtn.AnchorPoint = Vector2.new(0, 0.5)
         logoutBtn.Position = UDim2.new(0, 10, 0.5, 152)
+        appTitle.AnchorPoint = Vector2.new(1, 0.5)
+        appTitle.Position = UDim2.new(1, -72, 0.5, 12)
+        appTitle.TextXAlignment = Enum.TextXAlignment.Right
+    end
+end
+
+local function setDeepLayoutAll(state)
+    setDeepLayoutStatic(state)
+    if state then
+        wrapperFrame.Position = UDim2.new(1, -64, 0, 86)
+        statsRow.Position = UDim2.new(1, -64, 0, 60)
+        appLogo.Position = UDim2.new(0, 56, 0.5, 12)
+    else
         wrapperFrame.Position = UDim2.new(1, -10, 0, 86)
         statsRow.Position = UDim2.new(1, -10, 0, 60)
+        appLogo.Position = UDim2.new(1, -16, 0.5, 12)
     end
+end
+
+function applyDeepCustomLayout(state, animate)
+    deepCustomLayoutEnabled = state
+    if not animate or not (navBg and logoutBtn and wrapperFrame and statsRow and appLogo and appTitle) then
+        setDeepLayoutAll(state)
+        return
+    end
+    local barRoots = {navBg, logoutBtn}
+    local titleRoots = {appTitle}
+    local moveTi = TweenInfo.new(0.38, Enum.EasingStyle.Quart, Enum.EasingDirection.InOut)
+    tweenDeepLayoutFade(barRoots, false, 0.18)
+    tweenDeepLayoutFade(titleRoots, false, 0.18)
+    if state then
+        svc.TweenService:Create(appLogo, moveTi, {Position = UDim2.new(0, 56, 0.5, 12)}):Play()
+        svc.TweenService:Create(wrapperFrame, moveTi, {Position = UDim2.new(1, -64, 0, 86)}):Play()
+        svc.TweenService:Create(statsRow, moveTi, {Position = UDim2.new(1, -64, 0, 60)}):Play()
+    else
+        svc.TweenService:Create(appLogo, moveTi, {Position = UDim2.new(1, -16, 0.5, 12)}):Play()
+        svc.TweenService:Create(wrapperFrame, moveTi, {Position = UDim2.new(1, -10, 0, 86)}):Play()
+        svc.TweenService:Create(statsRow, moveTi, {Position = UDim2.new(1, -10, 0, 60)}):Play()
+    end
+    task.delay(0.18, function()
+        if deepCustomLayoutEnabled ~= state then return end
+        setDeepLayoutStatic(state)
+        tweenDeepLayoutFade(barRoots, true, 0.26)
+        tweenDeepLayoutFade(titleRoots, true, 0.26)
+    end)
 end
 
 function makeDropdown(parent, options, defaultIndex, callback, configKey)
@@ -1772,6 +2026,7 @@ function makeMultiDropdown(parent, options, defaultSelected, callback, configKey
 end
 _G.__DeltaUI_t = t
 
+tpService = game:GetService("TeleportService")
 vUser = game:GetService("VirtualUser")
 
 pages = {}
@@ -1918,13 +2173,6 @@ end
 __secGeneral = makeSectionCard("常规设置", nil, "settings", -3)
 
 
-rowAutoAcceptExec = makeSettingRow("auto_accept_exec", "auto_accept_exec_desc", -7)
-makeToggle(rowAutoAcceptExec, false, function(state)
-    local cfg = loadConfig()
-    cfg.autoAcceptExec = state
-    saveConfig(cfg)
-end, "autoAcceptExec")
-rowAutoAcceptExec.Parent = settingsScroll
 rowInit = makeSettingRow("init_ui", "init_ui_desc", -1)
 local function onInitUI()
     local function deleteFolder(path)
@@ -1967,10 +2215,51 @@ end
 makeDropdown(row0, {"English", "中文", "한국어", "日本語"}, 1, onLanguageChange, "language")
 row0.Parent = settingsScroll
 
+row1 = makeSettingRow("rejoin", "rejoin_desc", 1)
+local function onRejoin()
+    tpService:TeleportToPlaceInstance(game.PlaceId, game.JobId, v7)
+end
+makeActionButton("click_here", row1, onRejoin)
+row1.Parent = settingsScroll
+
 row2 = makeSettingRow("small_server", "small_server_desc", 2)
 local function onSmallServer()
-    
-    ShowNotification("你需要手动重新加入!", 3)
+    local placeId = game.PlaceId
+    local currentJobId = game.JobId
+    local targetServerId = nil
+    local cursor = ""
+    for _ = 1, 5 do
+        local url = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?limit=100"
+        if cursor ~= "" then url = url .. "&cursor=" .. cursor end
+        local raw = nil
+        local ok1, r1 = pcall(function() return requestWithUA(url) end)
+        if ok1 and r1 and r1 ~= "" then raw = r1
+        else
+            local ok2, r2 = pcall(function() return game:HttpGet(url) end)
+            if ok2 and r2 and r2 ~= "" then raw = r2 end
+        end
+        if not raw or raw == "" then break end
+        local ok3, data = pcall(svc.HttpService.JSONDecode, svc.HttpService, raw)
+        if not ok3 or not data or not data.data then break end
+        local candidates = {}
+        for _, srv in ipairs(data.data) do
+            if srv.playing < srv.maxPlayers and srv.id ~= currentJobId then
+                table.insert(candidates, srv)
+            end
+        end
+        table.sort(candidates, function(a, b) return a.playing < b.playing end)
+        if #candidates > 0 then
+            targetServerId = candidates[1].id
+            break
+        end
+        cursor = data.nextPageCursor or ""
+        if not cursor or cursor == "" then break end
+    end
+    if targetServerId then
+        pcall(function() tpService:TeleportToPlaceInstance(placeId, targetServerId, v7) end)
+    else
+        pcall(function() tpService:Teleport(placeId, v7) end)
+    end
 end
 makeActionButton("click_here", row2, onSmallServer)
 row2.Parent = settingsScroll
@@ -1998,12 +2287,8 @@ makeToggle(row9, true, function(state)
             settingsData.afkConnection:Disconnect()
         end
         settingsData.afkConnection = v7.Idled:Connect(function()
-            
-            
-            pcall(function()
-                vUser:SetKeyDown(Enum.KeyCode.W)
-                vUser:SetKeyUp(Enum.KeyCode.W)
-            end)
+            vUser:CaptureController()
+            vUser:ClickButton2(Vector2.new())
         end)
     else
         if settingsData.afkConnection then
@@ -2014,6 +2299,31 @@ makeToggle(row9, true, function(state)
 end, "antiAfk"
 )
 row9.Parent = settingsScroll
+
+rowAntiKick = makeSettingRow("anti_kick", "anti_kick_desc", 8)
+makeToggle(rowAntiKick, false, function(state)
+    if state then
+        local ok, wrapper, unhook = pcall(HookManager.wrapAntiKick, v7)
+        if ok and wrapper then
+            settingsData.kickUnhooker = unhook
+            settingsData.kickBlocked = true
+        else
+            warn("[DeltaUI] AntiKick hook failed")
+            settingsData.kickBlocked = false
+        end
+    else
+        if settingsData.kickUnhooker then
+            local ok = pcall(settingsData.kickUnhooker)
+            if not ok then warn("[DeltaUI] AntiKick unhook failed") end
+            settingsData.kickUnhooker = nil
+        end
+        settingsData.kickBlocked = nil
+    end
+    local cfg = loadConfig()
+    cfg.antiKick = state
+    saveConfig(cfg)
+end, "antiKick")
+rowAntiKick.Parent = settingsScroll
 
 row11 = makeSettingRow("auto_execute", "auto_execute_desc", 11)
 makeToggle(row11, true, function(state)
@@ -2104,13 +2414,8 @@ orbConfirmBtn.MouseButton1Click:Connect(function()
         Image = assetUrl,
         ZIndex = 102
     })
-    local orbCorner = orbFrame:FindFirstChildOfClass("UICorner")
-    if orbCorner then
-        corner(orbCorner.CornerRadius.Offset, orbImg)
-    else
-        corner(8, orbImg)
-    end
     orbImg.Parent = orbFrame
+    applyIconAppearance()
     ShowNotification(t("image_updated"), 1)
     orbConfirmBtn.Active = true
 end)
@@ -2332,51 +2637,112 @@ makeActionButton("reset_tab_order", resetRow, function()
 end)
 resetRow.Parent = settingsScroll
 
+function normalizeIconShape(v)
+    local s = tostring(v or "")
+    if s == "Circle" or s == "圆形" or s == "원형" or s == "円形" then return "circle" end
+    if s == "Square" or s == "方形" or s == "사각형" or s == "四角形" then return "square" end
+    if s == "Rounded Square" or s == "方圆角" or s == "둥근 사각형" or s == "角丸四角" then return "rounded" end
+    return "circle"
+end
+
+function normalizeIconSize(v)
+    local s = tostring(v or "")
+    if s == "Small" or s == "小" or s == "작음" then return 25 end
+    if s == "Large" or s == "大" or s == "큼" then return 45 end
+    return 35
+end
+
+function setOrbCorner(obj, radius)
+    if not obj then return end
+    for _, c in ipairs(obj:GetChildren()) do
+        if c:IsA("UICorner") then c:Destroy() end
+    end
+    if radius and radius > 0 then corner(radius, obj) end
+end
+
+function getOrbSize()
+    local sz = 0
+    pcall(function() sz = orbFrame.Size.X.Offset end)
+    if type(sz) ~= "number" or sz < 8 then
+        local ok, cfg = pcall(loadConfig)
+        if ok and type(cfg) == "table" then sz = normalizeIconSize(cfg.iconSize) end
+    end
+    if type(sz) ~= "number" or sz < 8 then sz = 35 end
+    return sz
+end
+
+function applyIconShape(val, explicitSize)
+    if not orbFrame then return end
+    local shape = normalizeIconShape(val)
+    local sz = explicitSize or getOrbSize()
+    local r = 0
+    if shape == "circle" then
+        r = sz / 2
+    elseif shape == "rounded" then
+        r = 8
+    end
+    pcall(function() setOrbCorner(orbFrame, r) end)
+    if orbImg then pcall(function() setOrbCorner(orbImg, r) end) end
+end
+
+function applyIconAppearance()
+    local ok, cfg = pcall(loadConfig)
+    if not ok or type(cfg) ~= "table" then return end
+    local sz = normalizeIconSize(cfg.iconSize)
+    if orbFrame then
+        if orbSizeTween then
+            pcall(function() orbSizeTween:Cancel() end)
+            orbSizeTween = nil
+        end
+        orbFrame.Size = UDim2.new(0, sz, 0, sz)
+    end
+    if orbImg then orbImg.Size = UDim2.new(1, 0, 1, 0) end
+    applyIconShape(cfg.iconShape or "Circle", sz)
+end
+
 row5 = makeSettingRow("icon_size", "icon_size_desc", 25.9)
 makeDropdown(row5, {t("size_small"), t("size_medium"), t("size_large")}, 2, function(val)
-    local sz = val == t("size_small") and 25 or val == t("size_medium") and 35 or 45
+    local sz = normalizeIconSize(val)
+    if orbSizeTween then
+        pcall(function() orbSizeTween:Cancel() end)
+        orbSizeTween = nil
+    end
     orbFrame.Size = UDim2.new(0, sz, 0, sz)
     if orbImg then
         orbImg.Size = UDim2.new(1, 0, 1, 0)
     end
-    local currentShape = getIconShape and getIconShape() or t("shape_circle")
-    applyIconShape(currentShape)
+    local currentShape = (getIconShape and getIconShape()) or "Circle"
+    applyIconShape(currentShape, sz)
 end
 , "iconSize")
 row5.Parent = settingsScroll
 
 row6 = makeSettingRow("icon_shape", "icon_shape_desc", 26)
-local function applyIconShape(val)
-    if not orbFrame then return end
-    for _, c in pairs(orbFrame:GetChildren()) do
-        if c:IsA("UICorner") then c:Destroy() end
-    end
-    if orbImg then
-        for _, c in pairs(orbImg:GetChildren()) do
-            if c:IsA("UICorner") then c:Destroy() end
-        end
-    end
-    if val == t("shape_circle") then
-        corner(orbFrame.Size.X.Offset/2, orbFrame)
-        if orbImg then corner(orbFrame.Size.X.Offset/2, orbImg) end
-    elseif val == t("shape_rounded") then
-        corner(8, orbFrame)
-        if orbImg then corner(8, orbImg) end
-    end
-end
-local _, getIconShape = makeDropdown(row6, {t("shape_circle"), t("shape_square"), t("shape_rounded")}, 1, function(val)
+_, getIconShape = makeDropdown(row6, {t("shape_circle"), t("shape_square"), t("shape_rounded")}, 1, function(val)
     applyIconShape(val)
 end, "iconShape")
 task.defer(function()
-    if getIconShape then applyIconShape(getIconShape()) end
+    applyIconAppearance()
 end)
 row6.Parent = settingsScroll
 
 rowDeepCustom = makeSettingRow("deep_custom_layout", "deep_custom_layout_desc", 26.1)
 makeToggle(rowDeepCustom, false, function(state)
-    applyDeepCustomLayout(state)
+    applyDeepCustomLayout(state, true)
 end, "deepCustomLayout")
 rowDeepCustom.Parent = settingsScroll
+
+rowOrbRainbow = makeSettingRow("orb_rainbow_border", "orb_rainbow_border_desc", 26.15)
+makeToggle(rowOrbRainbow, false, function(state)
+    applyOrbRainbowBorder(state)
+end, "orbRainbowBorder")
+rowOrbRainbow.Parent = settingsScroll
+do
+    local ok, cfg = pcall(loadConfig)
+    if ok and type(cfg) == "table" then
+        applyOrbRainbowBorder(cfg.orbRainbowBorder == true)
+    end
+end
 
 function createColorPickerRow(titleKey, descKey, layoutOrder, configKey, defaultColor, callback)
     local row = create("Frame", {Size = UDim2.new(1, 0, 0, 54), BackgroundColor3 = theme.surface, BackgroundTransparency = 0.3, BorderSizePixel = 0, LayoutOrder = layoutOrder, ZIndex = 4})
@@ -2830,62 +3196,11 @@ end)
 gradientThemeRow.Parent = settingsScroll
 
 orbColorRow = createColorPickerRow("orb_border_color", "orb_border_color_desc", 26.3, "orbBorderColor", theme.accent, function(newColor)
-    if orbStroke then
+    if orbStroke and not orbRainbowBorderEnabled then
         orbStroke.Color = newColor
     end
 end)
 orbColorRow.Parent = settingsScroll
-
-
-DANGER_FEATURES_URL = "https://cdn.jsdelivr.net/gh/WasKKal/DeltaExecutor-UI-Rebuild@master/deltaui/danger_features.lua"
-DANGER_FEATURES_LOCAL = "DeltaUI/DangerFeatures.lua"
-local dangerInstalled = false
-
-__secDanger = makeSectionCard(t("danger_features"), "danger_features", "triangle-alert", 26)
-
-
-rowDangerInstall = makeSettingRow("install_danger", "install_danger_desc", 1)
-local dangerInstallBtn = makeActionButton("install_danger_btn", rowDangerInstall, function()
-    if dangerInstalled then
-        pcall(function() if isfile(DANGER_FEATURES_LOCAL) then delfile(DANGER_FEATURES_LOCAL) end end)
-        dangerInstalled = false
-        setDangerBtnState(false)
-        ShowNotification(t("danger_uninstalled"), 2)
-    else
-        local content = nil
-        local ok = pcall(function() content = requestWithUA(DANGER_FEATURES_URL) end)
-        if not (ok and content and content ~= "") then
-            ok = pcall(function() content = game:HttpGet(DANGER_FEATURES_URL) end)
-        end
-        if ok and content and content ~= "" then
-            pcall(function() writefile(DANGER_FEATURES_LOCAL, content) end)
-            pcall(function() local f = loadstring(content); if f then f() end end)
-            dangerInstalled = true
-            setDangerBtnState(true)
-            ShowNotification(t("danger_installed"), 2)
-        else
-            ShowNotification(t("danger_install_failed"), 3)
-        end
-    end
-end)
-rowDangerInstall.Parent = settingsScroll
-
-local function setDangerBtnState(installed)
-    local grad = dangerInstallBtn:FindFirstChildOfClass("UIGradient")
-    if grad then grad:Destroy() end
-    dangerInstallBtn.BackgroundColor3 = installed and Color3.fromRGB(239, 68, 68) or theme.accent
-    local lbl = dangerInstallBtn:FindFirstChildOfClass("TextLabel")
-    if lbl then lbl.Text = installed and t("uninstall_danger_btn") or t("install_danger_btn") end
-end
-
-
-rowRejoin = makeSettingRow("rejoin", "rejoin_desc", 2)
-local function onRejoin()
-    local tp = game:GetService("TeleportService")
-    pcall(function() tp:TeleportToPlaceInstance(game.PlaceId, game.JobId, v7) end)
-end
-makeActionButton("click_here", rowRejoin, onRejoin)
-rowRejoin.Parent = settingsScroll
 
 __secPageExt = makeSectionCard(t("page_ext"), "page_ext", "puzzle", 26.5)
 
@@ -2944,7 +3259,7 @@ local PRESET_PAGES = {
         titleKey = "preset_coding",
         descKey = "preset_coding_desc",
         icon = "blocks",
-        url = "https://cdn.jsdelivr.net/gh/WasKKal/DeltaExecutor-UI-Rebuild@master/deltaui/coding_blocks.lua",
+        url = "https://raw.githubusercontent.com/WasKKal/Asset/master/deltaui/coding_blocks.lua",
         unsafe = true,
     },
     {
@@ -2952,7 +3267,7 @@ local PRESET_PAGES = {
         titleKey = "preset_deobfuscator",
         descKey = "preset_deobfuscator_desc",
         icon = "shield-check",
-        url = "https://cdn.jsdelivr.net/gh/WasKKal/DeltaExecutor-UI-Rebuild@master/deltaui/deobfuscator.lua",
+        url = "https://raw.githubusercontent.com/WasKKal/Asset/master/deltaui/deobfuscator.lua",
         unsafe = true,
     },
     {
@@ -2960,7 +3275,7 @@ local PRESET_PAGES = {
         titleKey = "preset_agentless",
         descKey = "preset_agentless_desc",
         icon = "atom",
-        url = "https://cdn.jsdelivr.net/gh/WasKKal/DeltaExecutor-UI-Rebuild@master/deltaui/agentless.lua",
+        url = "https://raw.githubusercontent.com/WasKKal/Asset/master/deltaui/agentless.lua",
         unsafe = true,
     },
 }
@@ -4024,9 +4339,6 @@ function registerExternalPage(code, url, defOverride, forceUnsafe)
             local p = "DeltaUI/Pages/" .. pageName .. ".lua"
             if isfile(p) then
                 local content = readfile(p)
-                
-                
-                
                 if content and content:match("^%-%- DeltaUIPage:") then
                     delfile(p)
                 end
@@ -4294,7 +4606,7 @@ function installInstalledPage(p)
         end
     end
     if not code or code == "" then return end
-    registerExternalPage(code, p.url, {name = p.name, title = p.title, icon = p.icon}, p.unsafe)
+    registerExternalPage(code, p.url, {name = p.name, title = p.title, icon = p.icon})
 end
 
 local function parsePageMeta(code)
@@ -4332,9 +4644,7 @@ local function getInstalledPagesFromFiles()
                             title = (type(info.title) == "string" and info.title) or meta.title or meta.name,
                             icon = (type(info.icon) == "string" and info.icon) or meta.icon or "sparkles",
                             url = meta.url or "",
-                            
-                            
-                            unsafe = true,
+                            unsafe = meta.unsafe == "1",
                             version = (type(info.version) == "string" and info.version) or meta.version or "1.0.0",
                             code = pureCode or content,
                         })
@@ -4345,9 +4655,6 @@ local function getInstalledPagesFromFiles()
                             title = (type(info.title) == "string" and info.title) or fname,
                             icon = (type(info.icon) == "string" and info.icon) or "sparkles",
                             url = "",
-                            
-                            
-                            
                             unsafe = true,
                             version = (type(info.version) == "string" and info.version) or "1.0.0",
                             code = content,
@@ -4440,11 +4747,12 @@ do
         if row and sec then row.Parent = sec end
     end
 
-    __reparent(rowAutoAcceptExec, __secGeneral)
     __reparent(rowInit, __secGeneral)
+    __reparent(row1, __secGeneral)
     __reparent(row2, __secGeneral)
     __reparent(row0, __secGeneral)
     __reparent(row4, __secGeneral)
+    __reparent(rowAntiKick, __secGeneral)
     __reparent(row9, __secGeneral)
     __reparent(row11, __secGeneral)
     __reparent(rowTransPath, __secGeneral)
@@ -4469,10 +4777,9 @@ do
     __reparent(row5, __secDeep)
     __reparent(row6, __secDeep)
     __reparent(rowDeepCustom, __secDeep)
+    __reparent(rowOrbRainbow, __secDeep)
     __reparent(gradientThemeRow, __secDeep)
     __reparent(orbColorRow, __secDeep)
-    __reparent(rowDangerInstall, __secDanger)
-    __reparent(rowRejoin, __secDanger)
 end
 
 maxLogEntries = 500
@@ -4511,6 +4818,10 @@ function stripPresetHeader(code)
         return code, 0
     end
     local endPos = closePos + #closeTag - 1
+    local header = code:sub(#lead + 1, endPos)
+    if header:find("Thank you for using DeltaBeautify", 1, true) == nil then
+        return code, 0
+    end
     local removed = 1
     for _ in code:sub(1, endPos):gmatch(string.char(10)) do
         removed = removed + 1
@@ -4561,6 +4872,14 @@ function translateError(msg)
         ["at line"] = {en = "at line", zh = "在行", ko = "줄", ja = "行"},
         ["to close"] = {en = "to close", zh = "关闭", ko = "닫기", ja = "閉じる"},
         ["did you forget to close"] = {en = "did you forget to close", zh = "你是否忘记关闭", ko = "닫는 것을 잊으셨나요", ja = "閉じるのを忘れましたか"},
+        ["Malformed string; did you forget to finish it"] = {en = "Malformed string; did you forget to finish it", zh = "字符串格式错误；是否忘记闭合字符串", ko = "잘못된 문자열; 문자열을 닫는 것을 잊으셨나요", ja = "不正な文字列；文字列を閉じるのを忘れましたか"},
+        ["did you forget to finish it"] = {en = "did you forget to finish it", zh = "是否忘记闭合字符串", ko = "문자열을 닫는 것을 잊으셨나요", ja = "文字列を閉じるのを忘れましたか"},
+        ["The Parent property of (.-) is locked"] = {en = "The Parent property of %1 is locked", zh = "%1 的 Parent 属性被锁定", ko = "%1의 Parent 속성이 잠겨 있습니다", ja = "%1 の Parent プロパティがロックされています"},
+        ["current parent: "] = {en = "current parent: ", zh = "当前父级：", ko = "현재 부모: ", ja = "現在の親: "},
+        ["new parent "] = {en = "new parent ", zh = "新父级：", ko = "새 부모: ", ja = "新しい親: "},
+        ["Stack Begin"] = {en = "Stack Begin", zh = "堆栈开始", ko = "스택 시작", ja = "スタック開始"},
+        ["Stack End"] = {en = "Stack End", zh = "堆栈结束", ko = "스택 종료", ja = "スタック終了"},
+        ["Out of local registers when trying to allocate v(%d+): exceeded limit (%d+)"] = {en = "Out of local registers when trying to allocate v%1: exceeded limit %2", zh = "分配局部寄存器 v%1 时不足：超过上限 %2", ko = "로컬 레지스터 v%1 할당 실패: 제한 %2 초과", ja = "ローカルレジスタ v%1 の割り当てに失敗：上限 %2 を超過"},
         ["attempt to index a nil value"] = {en = "attempt to index a nil value", zh = "尝试索引 nil 值", ko = "nil 값 인덱싱 시도", ja = "nil値をインデックスしようとしました"},
         ["attempt to get length of a nil value"] = {en = "attempt to get length of a nil value", zh = "尝试获取 nil 值的长度", ko = "nil 값의 길이를 얻으려고 시도함", ja = "nil値の長さを取得しようとしました"},
         ["attempt to compare nil with"] = {en = "attempt to compare nil with", zh = "尝试将 nil 与", ko = "nil을 다음과 비교 시도", ja = "nilを次と比較しようとしました"},
@@ -4819,6 +5138,19 @@ function hideExecutorUI(container)
     return hidden
 end
 
+function hasClipboardGetSupport()
+    local ok, env = pcall(function()
+        if type(getgenv) == "function" then
+            return getgenv()
+        end
+        return nil
+    end)
+    if not ok or type(env) ~= "table" then
+        return false
+    end
+    return type(env.getclipboard) == "function"
+end
+
 function getClipboardContent()
     local apis = {
         getclipboard,
@@ -4851,6 +5183,34 @@ function getClipboardContent()
     end
     return nil
 end
+
+function obCopyText(text)
+    if type(text) ~= "string" or text == "" then return false end
+    local ok, copied = pcall(function()
+        local genv = (type(getgenv) == "function") and getgenv() or nil
+        local setclip = setclipboard or toclipboard
+            or (syn and syn.setclipboard)
+            or (clipboard and clipboard.set)
+            or (genv and (genv.setclipboard or genv.toclipboard))
+        if type(setclip) == "function" then
+            setclip(text)
+            return true
+        end
+        return false
+    end)
+    if ok and copied then return true end
+    pcall(function()
+        if type(writefile) == "function" then
+            if type(makefolder) == "function" and type(isfolder) == "function" then
+                if not isfolder("DeltaUI") then makefolder("DeltaUI") end
+                writefile("DeltaUI/clipboard.txt", text)
+            end
+            writefile("clipboard.txt", text)
+        end
+    end)
+    return false
+end
+
 function generateHash64()
     local chars = "0123456789abcdef"
     local hash = ""
@@ -5335,13 +5695,38 @@ local name = filePath:match("([^/]*)%.lua$") or filePath:match("([^/]*)$")
                     AnchorPoint = Vector2.new(1, 0.5),
                     Position = UDim2.new(1, -3, 0.5, 0),
                     Size = UDim2.new(0, 28, 0, 28),
-                    BackgroundColor3 = autoExecEnabled and theme.accent or theme.surfaceLight,
+                    BackgroundColor3 = autoExecEnabled and Color3.fromRGB(255,255,255) or theme.surfaceLight,
                     BackgroundTransparency = 0.25,
                     Text = "",
                     BorderSizePixel = 0,
                     ZIndex = 5
                 })
                 corner(6, autoExecBtn)
+                local autoExecGrad = nil
+                local function setAutoExecVisual(on, animate)
+                    if on then
+                        if not autoExecGrad or not autoExecGrad.Parent then
+                            autoExecGrad = applyGradient(autoExecBtn, theme.accent, theme.accent2, 120)
+                        end
+                        autoExecBtn.BackgroundColor3 = Color3.fromRGB(255,255,255)
+                    else
+                        if autoExecGrad then
+                            pcall(function() autoExecGrad:Destroy() end)
+                            for i = #_G.__DeltaUI_gradients, 1, -1 do
+                                if _G.__DeltaUI_gradients[i] == autoExecGrad then
+                                    table.remove(_G.__DeltaUI_gradients, i)
+                                end
+                            end
+                            autoExecGrad = nil
+                        end
+                        if animate then
+                            svc.TweenService:Create(autoExecBtn, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundColor3 = theme.surfaceLight}):Play()
+                        else
+                            autoExecBtn.BackgroundColor3 = theme.surfaceLight
+                        end
+                    end
+                end
+                setAutoExecVisual(autoExecEnabled, false)
                 local autoExecIcon = GetIcon("file-terminal", UDim2.new(0, 14, 0, 14), Color3.fromRGB(255,255,255))
                 if autoExecIcon then
                     autoExecIcon.Position = UDim2.new(0.5, -7, 0.5, -7)
@@ -5351,7 +5736,7 @@ local name = filePath:match("([^/]*)%.lua$") or filePath:match("([^/]*)$")
                     autoExecBtn.MouseButton1Click:Connect(function()
                     autoExecEnabled = not autoExecEnabled
                     setAutoExecFileState(scriptName, autoExecEnabled)
-                    svc.TweenService:Create(autoExecBtn, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundColor3 = autoExecEnabled and theme.accent or theme.surfaceLight}):Play()
+                    setAutoExecVisual(autoExecEnabled, true)
                     if autoExecEnabled then
                         ShowNotification(t("autoexec_enabled"), 1)
                     else
@@ -5442,7 +5827,7 @@ local name = filePath:match("([^/]*)%.lua$") or filePath:match("([^/]*)$")
         })
         corner(10, kbItem)
         local kbTitle = create("TextLabel", {
-            Position = UDim2.new(0, 14, 0, 1.5),
+            Position = UDim2.new(0, 14, 0, 4),
             Size = UDim2.new(0.5, 0, 0, 20),
             BackgroundTransparency = 1,
             Text = "KeyBoard",
@@ -5476,7 +5861,8 @@ local name = filePath:match("([^/]*)%.lua$") or filePath:match("([^/]*)$")
             BackgroundTransparency = 0.3,
             Text = "",
             BorderSizePixel = 0,
-            ZIndex = 5
+            ZIndex = 5,
+            Active = true
         })
         applyGradient(kbExec, theme.accent, theme.accent2, 120)
         corner(8, kbExec)
@@ -5487,64 +5873,158 @@ local name = filePath:match("([^/]*)%.lua$") or filePath:match("([^/]*)$")
             TextColor3 = Color3.fromRGB(255,255,255),
             TextSize = 11,
             Font = Enum.Font.SourceSansBold,
-            ZIndex = 6
+            ZIndex = 6,
+            Active = false
         })
         kbExecText.Parent = kbExec
         kbExec.Parent = kbItem
-        kbExec.MouseButton1Click:Connect(function()
-            local kbCachePath = "DeltaUI/Cache/MobileKeyboard.lua"
-            local src = nil
-
-            if isfile(kbCachePath) then
-                local ok, localSrc = pcall(function() return readfile(kbCachePath) end)
-                if ok and localSrc and localSrc ~= "" then
-                    src = localSrc
+        local kbCachePath = "DeltaUI/Cache/MobileKeyboard.lua"
+        local KB_URLS = {
+            "https://raw.githubusercontent.com/AZYsGithub/Delta-Scripts/main/MobileKeyboard.txt",
+            "https://raw.githubusercontent.com/AZYsGithub/Delta-Scripts/refs/heads/main/MobileKeyboard.txt",
+            "https://github.com/AZYsGithub/Delta-Scripts/raw/refs/heads/main/MobileKeyboard.txt",
+        }
+        local function kbValid(s)
+            if type(s) ~= "string" or s == "" then return false end
+            local head = s:sub(1, 256):lower()
+            if head:find("<!doctype") or head:find("<html") or head:find("<head")
+                or head:find("404: not found") or head:find("rate limit") then
+                return false
+            end
+            return true
+        end
+        local function kbReadCache()
+            local ok, res = pcall(function()
+                if type(isfile) == "function" and isfile(kbCachePath) and type(readfile) == "function" then
+                    return readfile(kbCachePath)
+                end
+            end)
+            if ok and kbValid(res) then return res end
+            if ok and type(res) == "string" then
+                pcall(function() if type(delfile) == "function" then delfile(kbCachePath) end end)
+            end
+            return nil
+        end
+        local function kbRequest(url)
+            local okGet, body = pcall(function() return game:HttpGet(url) end)
+            if okGet and kbValid(body) then return body end
+            local reqFns = {}
+            local function add(v) if type(v) == "function" then table.insert(reqFns, v) end end
+            pcall(function()
+                add(syn and syn.request)
+                add(http_request)
+                add(http and http.request)
+                add(request)
+                add(fluxus and fluxus.request)
+            end)
+            for _, fn in ipairs(reqFns) do
+                local ok, resp = pcall(function() return fn({Url = url, Method = "GET"}) end)
+                if ok and type(resp) == "table" then
+                    local b = resp.Body or resp.body
+                    if kbValid(b) then return b end
                 end
             end
-
-            if not src or src == "" then
-                local ok, netSrc = pcall(function()
-                    return game:HttpGet("https://github.com/AZYsGithub/Delta-Scripts/raw/refs/heads/main/MobileKeyboard.txt")
-                end)
-                if ok and netSrc and netSrc ~= "" then
-                    src = netSrc
-
+            return nil
+        end
+        local function kbFetchNetwork()
+            for _, url in ipairs(KB_URLS) do
+                local body = kbRequest(url)
+                if body then
                     pcall(function()
-                        if not isfolder("DeltaUI") then makefolder("DeltaUI") end
-                        if not isfolder("DeltaUI/Cache") then makefolder("DeltaUI/Cache") end
-                        writefile(kbCachePath, src)
+                        if type(isfolder) == "function" then
+                            if not isfolder("DeltaUI") then makefolder("DeltaUI") end
+                            if not isfolder("DeltaUI/Cache") then makefolder("DeltaUI/Cache") end
+                        end
+                        if type(writefile) == "function" then writefile(kbCachePath, body) end
                     end)
+                    return body
                 end
             end
-
-            if src and src ~= "" then
-                ShowNotification(t("script_loaded") .. "KeyBoard", 2)
-                AddLog("> " .. t("executing_saved") .. "KeyBoard", "info")
-                local fn, err = loadstring(src)
-                if fn then
-                    local ok2, runErr = xpcall(fn, function(err)
-                        return debug.traceback(tostring(err), 2)
+            return nil
+        end
+        local function kbCompile(code)
+            local loader = nil
+            if type(loadstring) == "function" then loader = loadstring
+            elseif type(load) == "function" then loader = load end
+            if not loader then return nil, "loadstring/load unavailable" end
+            local ok, fn, err = pcall(function() return loader(code) end)
+            if not ok then return nil, tostring(fn) end
+            if type(fn) == "function" then return fn, nil end
+            return nil, tostring(err or "compile failed")
+        end
+        local kbBusy = false
+        kbExec.MouseButton1Click:Connect(function()
+            if kbBusy then return end
+            kbBusy = true
+            local function setStatus(s)
+                pcall(function() if kbSub and kbSub.Parent then kbSub.Text = s end end)
+            end
+            local function report(msg, level, dur)
+                pcall(function() AddLog(msg, level or "info") end)
+                pcall(function() ShowNotification(msg, dur or 3) end)
+            end
+            setStatus(t("kb_loading"))
+            task.spawn(function()
+                local okAll, fatal = pcall(function()
+                    local src = kbReadCache()
+                    local fromCache = src ~= nil
+                    if not src then src = kbFetchNetwork() end
+                    if not src then
+                        setStatus(t("kb_fail"))
+                        report("[KeyBoard] " .. t("fetch_failed"), "error", 3)
+                        return
+                    end
+                    local fn, err = kbCompile(src)
+                    if not fn and fromCache then
+                        pcall(function()
+                            if type(delfile) == "function" and type(isfile) == "function" and isfile(kbCachePath) then
+                                delfile(kbCachePath)
+                            end
+                        end)
+                        src = kbFetchNetwork()
+                        if src then fn, err = kbCompile(src) end
+                    end
+                    if not fn then
+                        setStatus(t("kb_fail"))
+                        report("[KeyBoard] " .. tostring(err), "error", 3)
+                        return
+                    end
+                    local ok2, runErr = xpcall(fn, function(e)
+                        local okTb, tb = pcall(function()
+                            if type(debug) == "table" and type(debug.traceback) == "function" then
+                                return debug.traceback(tostring(e), 2)
+                            end
+                            return tostring(e)
+                        end)
+                        return okTb and tb or tostring(e)
                     end)
-                    if ok2 then
-                        ShowNotification(t("script_loaded") .. "KeyBoard", 2)
+                    if not ok2 then
+                        setStatus(t("kb_fail"))
+                        report("[KeyBoard] " .. tostring(runErr), "error", 3)
+                        return
+                    end
+                    setStatus(t("kb_ok"))
+                    report("> " .. t("script_loaded") .. "KeyBoard", "info", 2)
+                    pcall(function()
                         main.Visible = false
-                        orbFrame.Visible = true
-                        orbFrame.BackgroundTransparency = 0.1
+                        if orbFrame then
+                            orbFrame.Visible = true
+                            orbFrame.BackgroundTransparency = 0.1
+                        end
                         if orbStroke then orbStroke.Transparency = 0 end
                         orbPulseActive = true
-                        orbPulseConn = svc.RunService.RenderStepped:Connect(orbPulse)
-                    else
-                        AddLog("[Error] " .. tostring(runErr), "error")
-                        ShowNotification(t("execution_error_notify"), 3)
-                    end
-                else
-                    AddLog("[Error] " .. tostring(err), "error")
-                    ShowNotification(t("execution_error_notify"), 3)
+                        if orbPulseConn then pcall(function() orbPulseConn:Disconnect() end) end
+                        if type(orbPulse) == "function" then
+                            orbPulseConn = svc.RunService.RenderStepped:Connect(orbPulse)
+                        end
+                    end)
+                end)
+                if not okAll then
+                    setStatus(t("kb_fail"))
+                    report("[KeyBoard] " .. tostring(fatal), "error", 3)
                 end
-            else
-                AddLog("[Script] Failed to fetch: KeyBoard", "error")
-                ShowNotification(t("fetch_failed"), 3)
-            end
+                kbBusy = false
+            end)
         end)
 
         kbItem.Parent = scriptListScroll
@@ -7479,7 +7959,7 @@ if scriptbloxCloseIcon then
 end
 scriptbloxOptionClose.Parent = scriptbloxOptionCard
 scriptbloxOptionClose.MouseButton1Click:Connect(function()
-    scriptbloxOptionOverlay.Visible = false
+    fadeModal(scriptbloxOptionOverlay, false)
 end)
 
 function makeScriptBloxOptionBtn(text, iconName, color, posY, callback)
@@ -7493,10 +7973,13 @@ function makeScriptBloxOptionBtn(text, iconName, color, posY, callback)
     local txt = create("TextLabel", {Position = UDim2.new(0, 42, 0, 0), Size = UDim2.new(1, -50, 1, 0), BackgroundTransparency = 1, Text = text, TextColor3 = Color3.fromRGB(255,255,255), TextSize = 13, Font = Enum.Font.SourceSansBold, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Center, ZIndex = 403})
     txt.Parent = btn
     btn.Parent = scriptbloxOptionCard
+    if color == theme.accent then
+        applyGradient(btn, theme.accent, theme.accent2, 120)
+    end
     btn.MouseButton1Click:Connect(function()
         if not btn.Active then return end
         btn.Active = false
-        scriptbloxOptionOverlay.Visible = false
+        fadeModal(scriptbloxOptionOverlay, false)
         task.spawn(function()
             callback()
             btn.Active = true
@@ -7619,7 +8102,7 @@ scriptbloxOptionOverlay.InputBegan:Connect(function(input)
         local cardPos = scriptbloxOptionCard.AbsolutePosition
         local cardSize = scriptbloxOptionCard.AbsoluteSize
         if pos.X < cardPos.X or pos.X > cardPos.X + cardSize.X or pos.Y < cardPos.Y or pos.Y > cardPos.Y + cardSize.Y then
-            scriptbloxOptionOverlay.Visible = false
+            fadeModal(scriptbloxOptionOverlay, false)
         end
     end
 end)
@@ -7630,10 +8113,18 @@ function makeScriptBloxCard(scriptData, layoutOrder)
 
     local verifiedBadge = nil
     if scriptData.verified then
-        verifiedBadge = create("Frame", {Position = UDim2.new(1, -90, 0, 10), Size = UDim2.new(0, 80, 0, 24), BackgroundColor3 = theme.accent, BackgroundTransparency = 0.25, BorderSizePixel = 0, ZIndex = 6})
-        applyGradient(verifiedBadge, theme.accent, theme.accent2, 120)
+        verifiedBadge = create("Frame", {Position = UDim2.new(1, -90, 0, 10), Size = UDim2.new(0, 80, 0, 24), BackgroundColor3 = Color3.fromRGB(255, 255, 255), BackgroundTransparency = 0, BorderSizePixel = 0, ZIndex = 6})
+        local badgeGradient = create("UIGradient", {
+            Color = ColorSequence.new({
+                ColorSequenceKeypoint.new(0,    Color3.fromRGB(52, 199, 130)),
+                ColorSequenceKeypoint.new(0.72, Color3.fromRGB(62, 208, 142)),
+                ColorSequenceKeypoint.new(1,    Color3.fromRGB(226, 249, 238)),
+            }),
+            Rotation = 120,
+        })
+        badgeGradient.Parent = verifiedBadge
         corner(12, verifiedBadge)
-        local vbText = create("TextLabel", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = t("verified_badge"), TextColor3 = Color3.fromRGB(255,255,255), TextSize = 10, Font = Enum.Font.SourceSansBold, TextXAlignment = Enum.TextXAlignment.Center, TextYAlignment = Enum.TextYAlignment.Center, ZIndex = 7})
+        local vbText = create("TextLabel", {Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = t("verified_badge"), TextColor3 = Color3.fromRGB(18, 74, 54), TextSize = 10, Font = Enum.Font.SourceSansBold, TextXAlignment = Enum.TextXAlignment.Center, TextYAlignment = Enum.TextYAlignment.Center, ZIndex = 7})
         vbText.Parent = verifiedBadge
         verifiedBadge.Parent = card
     end
@@ -7669,7 +8160,7 @@ function makeScriptBloxCard(scriptData, layoutOrder)
     openBtn.Parent = card
     openBtn.MouseButton1Click:Connect(function()
         scriptbloxSelectedScript = scriptData
-        scriptbloxOptionOverlay.Visible = true
+        fadeModal(scriptbloxOptionOverlay, true)
     end)
 
     return card
@@ -7770,6 +8261,14 @@ else
     orbStroke.Parent = orbFrame
     orbFrame.Parent = screenGui
 end
+do
+    local ok, cfg = pcall(loadConfig)
+    if ok and type(cfg) == "table" then
+        applyOrbRainbowBorder(cfg.orbRainbowBorder == true)
+    else
+        applyOrbRainbowBorder(orbRainbowBorderEnabled)
+    end
+end
 orbBtn = create("TextButton", {
     Size = UDim2.new(1, 0, 1, 0),
     BackgroundTransparency = 1,
@@ -7848,7 +8347,9 @@ logoutBtn.MouseButton1Click:Connect(function()
     orbFrame.BackgroundTransparency = 1
     local targetSize = orbFrame.Size
     orbFrame.Size = UDim2.new(0, 0, 0, 0)
-    svc.TweenService:Create(orbFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0.1, Size = targetSize}):Play()
+    if orbSizeTween then pcall(function() orbSizeTween:Cancel() end) end
+    orbSizeTween = svc.TweenService:Create(orbFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0.1, Size = targetSize})
+    orbSizeTween:Play()
 end)
 orbBtn.MouseButton1Click:Connect(function()
     if orbDragDistance > 5 then return end
@@ -8459,7 +8960,7 @@ local function highlightExecLine(logicalLine, colorType)
     target.Visible = true
 end
 
-local function parseErrorLine(errMsg)
+function parseErrorLine(errMsg)
     if not errMsg then return nil end
         local function extractNumberAfterToken(str, token)
         local startPos = str:find(token, 1, true)
@@ -8817,7 +9318,7 @@ function _G.__DeltaUI_doSyntaxHighlight()
         local ok, result = pcall(syntaxHighlight, raw)
         if not ok or #result > VP_MAX_RICHTEXT_LEN then
             syntaxLabel.RichText = false
-            syntaxLabel.Text = raw:sub(1, 79900)
+            pcall(function() syntaxLabel.Text = raw end)
             if not ok then warn("[DeltaUI] Syntax highlight failed: " .. tostring(result)) end
             return
         end
@@ -8858,7 +9359,7 @@ function _G.__DeltaUI_doSyntaxHighlight()
     end
     if totalLen > VP_MAX_RICHTEXT_LEN then
         syntaxLabel.RichText = false
-        syntaxLabel.Text = raw:sub(1, 199900)
+        pcall(function() syntaxLabel.Text = raw end)
         return
     end
     syntaxLabel.Text = table.concat(parts, string.char(10))
@@ -8873,6 +9374,8 @@ currentCodePage = 1
 codePageBreaks = {}
 isProgrammaticTextChange = false
 isExecScanning = false
+expectedProgrammaticText = nil
+currentPageOriginalText = nil
 
 function getUniqueTabName()
     local base = "New tab"
@@ -8983,6 +9486,13 @@ function calculatePageBreaks(text)
         table.insert(codePageBreaks, 1)
     end
 end
+function setProgrammaticText(txt)
+    expectedProgrammaticText = txt
+    isProgrammaticTextChange = true
+    codeBox.Text = txt
+    isProgrammaticTextChange = false
+end
+
 function showCurrentPage()
     local ok, err = pcall(function()
         if not tabs[currentTab] then return end
@@ -9013,12 +9523,8 @@ function showCurrentPage()
                 pageText = pageText .. string.char(10)
             end
         end
-        if #pageText > 199000 then
-            pageText = pageText:sub(1, 199000) .. "..."
-        end
-        isProgrammaticTextChange = true
-        codeBox.Text = pageText
-        isProgrammaticTextChange = false
+        currentPageOriginalText = pageText
+        setProgrammaticText(pageText)
         updateLineNumbers()
         _G.__DeltaUI_doSyntaxHighlight()
         updatePageSwitcher()
@@ -9035,17 +9541,44 @@ end
 function saveCurrentTab()
     if not tabs[currentTab] then return end
     local text = codeBox.Text
+    if type(text) ~= "string" then return end
     if text == "" then
         tabs[currentTab].content = ""
+        currentPageOriginalText = ""
         return
     end
-    if #codePageBreaks > 1 and currentCodePage <= #codePageBreaks and currentCodePage >= 1 then
-        local fullText = tabs[currentTab].content or ""
-        if type(fullText) ~= "string" then fullText = "" end
-        local allLines = splitLines(fullText)
-        local pageStart = codePageBreaks[currentCodePage] or 1
-        local endLine = codePageBreaks[currentCodePage + 1] and codePageBreaks[currentCodePage + 1] - 1 or #allLines
-        local newLines = splitLines(text)
+    local fullText = tabs[currentTab].content or ""
+    if type(fullText) ~= "string" then fullText = "" end
+    local allLines = splitLines(fullText)
+    local hasPaging = (#codePageBreaks > 1 and currentCodePage >= 1 and currentCodePage <= #codePageBreaks)
+    local pageStart, endLine = 1, #allLines
+    if hasPaging then
+        pageStart = codePageBreaks[currentCodePage] or 1
+        endLine = (codePageBreaks[currentCodePage + 1] and codePageBreaks[currentCodePage + 1] - 1) or #allLines
+    end
+    local pageLineCount = math.max(1, endLine - pageStart + 1)
+    local newLines = splitLines(text)
+    local wholeReplace = false
+    if hasPaging then
+        local orig = currentPageOriginalText
+        if type(orig) == "string" and orig ~= "" then
+            if text:sub(1, 48) ~= orig:sub(1, 48) and text:sub(-48) ~= orig:sub(-48) then
+                wholeReplace = true
+            end
+        end
+        if #newLines > math.max(pageLineCount + 20, math.floor(#allLines * 0.8)) then
+            wholeReplace = true
+        end
+    end
+    if wholeReplace then
+        tabs[currentTab].content = text
+        calculatePageBreaks(text)
+        currentCodePage = 1
+        updatePageSwitcher()
+        currentPageOriginalText = nil
+        return
+    end
+    if hasPaging then
         local merged = {}
         for i = 1, pageStart - 1 do
             table.insert(merged, allLines[i] or "")
@@ -9056,9 +9589,10 @@ function saveCurrentTab()
         for i = endLine + 1, #allLines do
             table.insert(merged, allLines[i] or "")
         end
-        text = table.concat(merged, string.char(10))
+        tabs[currentTab].content = table.concat(merged, string.char(10))
+    else
+        tabs[currentTab].content = text
     end
-    tabs[currentTab].content = text
 end
 
 function renderTabs()
@@ -9103,7 +9637,8 @@ function renderTabs()
                     tabs[1].name = getUniqueTabName()
                     currentCodePage = 1
                     codePageBreaks = {}
-                    codeBox.Text = ""
+                    currentPageOriginalText = ""
+                    setProgrammaticText("")
                     updateLineNumbers()
                     renderTabs()
                     return
@@ -9141,9 +9676,8 @@ function addTab()
         tabIdCounter = tabIdCounter + 1
         currentCodePage = 1
         codePageBreaks = {}
-        isProgrammaticTextChange = true
-        codeBox.Text = defaultEditorText
-        isProgrammaticTextChange = false
+        currentPageOriginalText = defaultEditorText
+        setProgrammaticText(defaultEditorText)
         codeBox.TextTransparency = 1
         updateLineNumbers()
         task.defer(_G.__DeltaUI_doSyntaxHighlight)
@@ -9159,6 +9693,25 @@ codeBox.TextTransparency = 1
 showCurrentPage()
 
 codeBox:GetPropertyChangedSignal("Text"):Connect(function()
+    local expected = expectedProgrammaticText
+    if expected ~= nil then
+        if codeBox.Text == expected then
+            expectedProgrammaticText = nil
+            isProgrammaticTextChange = false
+            updateLineNumbers()
+            updateSyntaxHighlight()
+            updateEditorSize()
+            return
+        end
+        expectedProgrammaticText = nil
+    end
+    if type(currentPageOriginalText) == "string" and currentPageOriginalText ~= ""
+        and codeBox.Text == currentPageOriginalText then
+        updateLineNumbers()
+        updateSyntaxHighlight()
+        updateEditorSize()
+        return
+    end
     updateLineNumbers()
     if not isProgrammaticTextChange and tabs[currentTab] then
         saveCurrentTab()
@@ -9322,8 +9875,10 @@ svc.UserInputService.InputBegan:Connect(function(input, processed)
 end)
 
 clearBtn.MouseButton1Click:Connect(function()
-    isProgrammaticTextChange = true
-    codeBox.Text = defaultEditorText
+    currentCodePage = 1
+    codePageBreaks = {}
+    currentPageOriginalText = defaultEditorText
+    setProgrammaticText(defaultEditorText)
     if syntaxLabel and syntaxLabel.Parent then
         syntaxLabel.Text = ""
     end
@@ -9332,7 +9887,7 @@ clearBtn.MouseButton1Click:Connect(function()
         tabs[currentTab].content = defaultEditorText
     end
     clearExecHighlights()
-    isProgrammaticTextChange = false
+    updatePageSwitcher()
     ShowNotification(t("editor_cleared"), 1)
 end)
 newlineBtn = create("TextButton", {
@@ -9388,6 +9943,10 @@ clipText.Parent = execClipBtn
 table.insert(settingsData.uiRefs, {element = clipText, key = "execute_clipboard"})
 execClipBtn.Parent = bottomBar
 execClipBtn.MouseButton1Click:Connect(function()
+    if not hasClipboardGetSupport() then
+        ShowNotification("Delta不提供剪贴板获取渠道", 2)
+        return
+    end
     cleanupOldUI()
     local result = getClipboardContent()
     if not result or result == "" then
@@ -9597,7 +10156,8 @@ function consoleEntryClicked(entry)
     local txt
     pcall(function() txt = entry.Text end)
     if type(txt) ~= "string" or txt == "" then return end
-    if obCopyText(txt) then
+    local copyOK, copied = pcall(obCopyText, txt)
+    if copyOK and copied then
         ShowNotification(t("copied"), 1.2)
     else
         ShowNotification(t("clipboard_unavailable"), 2)
@@ -9621,7 +10181,8 @@ function consoleCopySelectedLines()
         ShowNotification(t("console_select_none"), 2)
         return
     end
-    if obCopyText(table.concat(lines, "\n")) then
+    local copyOK, copied = pcall(obCopyText, table.concat(lines, "\n"))
+    if copyOK and copied then
         ShowNotification((t("console_copied_count")):format(#lines), 1.8)
     else
         ShowNotification(t("clipboard_unavailable"), 2)
@@ -10034,7 +10595,7 @@ modalTitle = create("TextLabel", {
     Position = UDim2.new(0, 20, 0, 16),
     Size = UDim2.new(1, -40, 0, 28),
     BackgroundTransparency = 1,
-    Text = t("Enter Details"),
+    Text = t("enter_details"),
     TextColor3 = theme.text,
     TextSize = 18,
     Font = Enum.Font.SourceSansBold,
@@ -10042,11 +10603,12 @@ modalTitle = create("TextLabel", {
     ZIndex = 202
 })
 modalTitle.Parent = modalCard
+table.insert(settingsData.uiRefs, {element = modalTitle, key = "enter_details"})
 modalSub = create("TextLabel", {
     Position = UDim2.new(0, 20, 0, 46),
     Size = UDim2.new(1, -40, 0, 40),
     BackgroundTransparency = 1,
-    Text = t("Complete the necessary parameters to upload your client script"),
+    Text = t("enter_details_desc"),
     TextColor3 = theme.textDim,
     TextSize = 12,
     Font = Enum.Font.SourceSans,
@@ -10055,6 +10617,7 @@ modalSub = create("TextLabel", {
     ZIndex = 202
 })
 modalSub.Parent = modalCard
+table.insert(settingsData.uiRefs, {element = modalSub, key = "enter_details_desc"})
 modalClose = create("TextButton", {
     AnchorPoint = Vector2.new(1, 0),
     Position = UDim2.new(1, -16, 0, 16),
@@ -10070,7 +10633,7 @@ if modalCloseIcon then
 end
 modalClose.Parent = modalCard
 modalClose.MouseButton1Click:Connect(function()
-    modalOverlay.Visible = false
+    fadeModal(modalOverlay, false)
 end)
 titleBox = create("Frame", {
     Position = UDim2.new(0, 20, 0, 96),
@@ -10087,7 +10650,7 @@ titleLabel = create("TextLabel", {
     Position = UDim2.new(0, 12, 0, 8),
     Size = UDim2.new(1, -24, 0, 18),
     BackgroundTransparency = 1,
-    Text = t("Title"),
+    Text = t("title"),
     TextColor3 = theme.textDim,
     TextSize = 11,
     Font = Enum.Font.SourceSansBold,
@@ -10095,12 +10658,13 @@ titleLabel = create("TextLabel", {
     ZIndex = 203
 })
 titleLabel.Parent = titleBox
+table.insert(settingsData.uiRefs, {element = titleLabel, key = "title"})
 titleInput = create("TextBox", {
     Position = UDim2.new(0, 12, 0, 26),
     Size = UDim2.new(1, -24, 0, 26),
     BackgroundTransparency = 1,
     Text = "",
-    PlaceholderText = t("Enter Your Title..."),
+    PlaceholderText = t("title_placeholder"),
     PlaceholderColor3 = theme.textDim,
     TextColor3 = theme.text,
     TextSize = 14,
@@ -10127,7 +10691,7 @@ scriptLabel = create("TextLabel", {
     Position = UDim2.new(0, 12, 0, 8),
     Size = UDim2.new(1, -24, 0, 18),
     BackgroundTransparency = 1,
-    Text = t("Script"),
+    Text = t("script"),
     TextColor3 = theme.textDim,
     TextSize = 11,
     Font = Enum.Font.SourceSansBold,
@@ -10135,12 +10699,13 @@ scriptLabel = create("TextLabel", {
     ZIndex = 203
 })
 scriptLabel.Parent = scriptBox
+table.insert(settingsData.uiRefs, {element = scriptLabel, key = "script"})
 scriptInput = create("TextBox", {
     Position = UDim2.new(0, 12, 0, 28),
     Size = UDim2.new(1, -24, 1, -36),
     BackgroundTransparency = 1,
     Text = "",
-    PlaceholderText = t("Enter Your Script..."),
+    PlaceholderText = t("script_placeholder"),
     PlaceholderColor3 = theme.textDim,
     TextColor3 = theme.text,
     TextSize = 13,
@@ -10156,9 +10721,9 @@ scriptInput.Parent = scriptBox
 create("UIPadding", {PaddingLeft = UDim.new(0, 5)}).Parent = scriptInput
 
 updateBtn.MouseButton1Click:Connect(function()
-    modalOverlay.Visible = true
-    titleInput.Text = t("title_placeholder")
-    scriptInput.Text = t("script_placeholder")
+    fadeModal(modalOverlay, true)
+    titleInput.Text = ""
+    scriptInput.Text = ""
 end)
 addScriptBtn = create("TextButton", {
     Position = UDim2.new(0, 20, 1, -52),
@@ -10175,29 +10740,32 @@ addScriptBtn.Parent = modalCard
 addScriptText = create("TextLabel", {
     Size = UDim2.new(1, 0, 1, 0),
     BackgroundTransparency = 1,
-    Text = t("Add Script"),
+    Text = t("add_script"),
     TextColor3 = Color3.fromRGB(255,255,255),
     TextSize = 14,
     Font = Enum.Font.SourceSansBold,
     ZIndex = 203
 })
 addScriptText.Parent = addScriptBtn
+table.insert(settingsData.uiRefs, {element = addScriptText, key = "add_script"})
 addScriptBtn.MouseButton1Click:Connect(function()
     if addScriptBtn.Active == false then return end
     addScriptBtn.Active = false
     local title = titleInput.Text
     local scriptCode = scriptInput.Text
-    if title == "" or title == t("title_placeholder") then
+    if title:match("^%s*$") or title == t("title_placeholder") then
         addScriptBtn.Active = true
         return
     end
-    if scriptCode == "" or scriptCode == t("script_placeholder") then
+    if scriptCode:match("^%s*$") or scriptCode == t("script_placeholder") then
         addScriptBtn.Active = true
         return
     end
     ensureFolder()
     writefile(saveFolder .. "/" .. title, scriptCode)
-    modalOverlay.Visible = false
+    titleInput.Text = ""
+    scriptInput.Text = ""
+    fadeModal(modalOverlay, false)
     task.wait(0.1)
     refreshScriptList("")
     addScriptBtn.Active = true
